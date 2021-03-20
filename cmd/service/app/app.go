@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 type Server struct {
@@ -34,7 +35,7 @@ func (s *Server) Init() error {
 	)
 
 	// функция-связка между middleware и security service
-	// (для чистоты security service ничего не знает об http)
+	// (для чистоты: security service ничего не знает об http)
 	roleChecker := func(ctx context.Context, roles ...string) bool {
 		userDetails, err := authenticator.Authentication(ctx)
 		if err != nil {
@@ -48,6 +49,10 @@ func (s *Server) Init() error {
 	s.router.Get("/public", s.handlePublic)
 	s.router.With(identificatorMd, authenticatorMd, adminRoleMd).Get("/admin", s.handleAdmin)
 	s.router.With(identificatorMd, authenticatorMd, userRoleMd).Get("/user", s.handleUser)
+
+	s.router.With(identificatorMd, authenticatorMd, userRoleMd).Post("/user/payments", s.handleCreatePayment)
+	s.router.With(identificatorMd, authenticatorMd, userRoleMd).Get("/user/payments", s.handleUserPayments)
+	s.router.With(identificatorMd, authenticatorMd, adminRoleMd).Get("/admin/payments", s.handleAllPayments)
 
 	return nil
 }
@@ -75,17 +80,8 @@ func (s *Server) handleRegister(writer http.ResponseWriter, request *http.Reques
 	}
 
 	data := &dto.TokenDTO{Token: token}
-	respBody, err := json.Marshal(data)
-	if err != nil {
-		writer.WriteHeader(http.StatusInternalServerError)
-		return
-	}
 
-	writer.Header().Set("Content-Type", "application/json")
-	_, err = writer.Write(respBody)
-	if err != nil {
-		log.Print(err)
-	}
+	writeJson(writer, data, http.StatusCreated)
 }
 
 func (s *Server) handleLogin(writer http.ResponseWriter, request *http.Request) {
@@ -107,17 +103,8 @@ func (s *Server) handleLogin(writer http.ResponseWriter, request *http.Request) 
 	}
 
 	data := &dto.TokenDTO{Token: token}
-	respBody, err := json.Marshal(data)
-	if err != nil {
-		writer.WriteHeader(http.StatusInternalServerError)
-		return
-	}
 
-	writer.Header().Set("Content-Type", "application/json")
-	_, err = writer.Write(respBody)
-	if err != nil {
-		log.Print(err)
-	}
+	writeJson(writer, data, http.StatusOK)
 }
 
 // Доступно всем
@@ -141,5 +128,102 @@ func (s *Server) handleUser(writer http.ResponseWriter, request *http.Request) {
 	_, err := writer.Write([]byte("user"))
 	if err != nil {
 		log.Print(err)
+	}
+}
+
+// Только пользователям с ролью USER
+func (s *Server) handleCreatePayment(writer http.ResponseWriter, request *http.Request) {
+	amountString := request.PostFormValue("amount")
+	if amountString == "" {
+		writer.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	amount, err := strconv.ParseInt(amountString, 10, 64)
+	if err != nil {
+		writer.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	auth, err := authenticator.Authentication(request.Context())
+	if err != nil {
+		writer.WriteHeader(http.StatusForbidden)
+		return
+	}
+	userDetail, ok := auth.(*security.UserDetails)
+	if !ok {
+		writer.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	id, err := s.businessSvc.CreatePayment(request.Context(), userDetail.ID, amount)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data := &dto.PaymentDTO{
+		Id:       id,
+		SenderId: userDetail.ID,
+		Amount:   amount,
+	}
+
+	writeJson(writer, data, http.StatusCreated)
+}
+
+// Только пользователям с ролью USER
+func (s *Server) handleUserPayments(writer http.ResponseWriter, request *http.Request) {
+	auth, err := authenticator.Authentication(request.Context())
+	if err != nil {
+		writer.WriteHeader(http.StatusForbidden)
+		return
+	}
+	userDetail, ok := auth.(*security.UserDetails)
+	if !ok {
+		writer.WriteHeader(http.StatusForbidden)
+		return
+	}
+
+	payments, err := s.businessSvc.GetUserPayments(request.Context(), userDetail.ID)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data := make([]*dto.PaymentDTO, len(payments))
+	for i, p := range payments {
+		data[i] = dto.FromPaymentModel(p)
+	}
+
+	writeJson(writer, data, http.StatusOK)
+}
+
+// Только пользователям с ролью ADMIN
+func (s *Server) handleAllPayments(writer http.ResponseWriter, request *http.Request) {
+	payments, err := s.businessSvc.GetAllPayments(request.Context())
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	data := make([]*dto.PaymentDTO, len(payments))
+	for i, p := range payments {
+		data[i] = dto.FromPaymentModel(p)
+	}
+
+	writeJson(writer, data, http.StatusOK)
+}
+
+func writeJson(writer http.ResponseWriter, data interface{}, code int) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		writer.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	writer.Header().Set("Content-Type", "application/json")
+	writer.WriteHeader(code)
+	_, err = writer.Write(body)
+	if err != nil {
+		log.Println(err)
 	}
 }

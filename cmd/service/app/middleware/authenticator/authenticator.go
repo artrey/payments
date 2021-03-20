@@ -51,4 +51,3 @@ func Authentication(ctx context.Context) (interface{}, error) {
 	}
 	return nil, ErrNoAuthentication
 }
-

@@ -3,44 +3,34 @@ package main
 import (
 	"context"
 	"github.com/artrey/payments/cmd/service/app"
+	"github.com/artrey/payments/pkg/business"
+	"github.com/artrey/payments/pkg/security"
 	"github.com/go-chi/chi"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"log"
-	"net/http"
-
-	"github.com/artrey/payments/pkg/business"
-	"github.com/artrey/payments/pkg/security"
-	//"context"
-	//"github.com/jackc/pgx/v4/pgxpool"
-	//"log"
-	//"net"
-	//"net/http"
-	//"os"
-	//"service/cmd/service/app"
-	//"service/pkg/business"
-	//"service/pkg/security"
 	"net"
+	"net/http"
 	"os"
 )
 
 const (
-	defaultPort = "9999"
 	defaultHost = "0.0.0.0"
+	defaultPort = "9999"
 	defaultDSN  = "postgres://app:pass@localhost:5432/db"
 )
 
 func main() {
-	port, ok := os.LookupEnv("APP_PORT")
-	if !ok {
-		port = defaultPort
-	}
-
-	host, ok := os.LookupEnv("APP_HOST")
+	host, ok := os.LookupEnv("HOST")
 	if !ok {
 		host = defaultHost
 	}
 
-	dsn, ok := os.LookupEnv("APP_DSN")
+	port, ok := os.LookupEnv("PORT")
+	if !ok {
+		port = defaultPort
+	}
+
+	dsn, ok := os.LookupEnv("DATABASE_URL")
 	if !ok {
 		dsn = defaultDSN
 	}
@@ -54,7 +44,7 @@ func execute(addr string, dsn string) error {
 	ctx := context.Background()
 	pool, err := pgxpool.Connect(ctx, dsn)
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		return err
 	}
 	defer pool.Close()
@@ -65,7 +55,7 @@ func execute(addr string, dsn string) error {
 	application := app.NewServer(securitySvc, businessSvc, router)
 	err = application.Init()
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		return err
 	}
 

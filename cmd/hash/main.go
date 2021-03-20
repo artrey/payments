@@ -14,4 +14,10 @@ func main() {
 
 	// hash будет каждый раз разным для одних и тех же данных - это нормально (т.к. соль разная)
 	log.Print(string(hash))
+
+	if err = bcrypt.CompareHashAndPassword(hash, []byte("secret")); err != nil {
+		log.Println(err)
+	} else {
+		log.Println("OK")
+	}
 }

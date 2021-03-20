@@ -1,0 +1,82 @@
+### Получение токена под user'ом
+
+PUT http://localhost:9999/users
+Content-Type: application/x-www-form-urlencoded
+
+login=user&password=secret
+
+> {%
+client.test("Request executed successfully", function() {
+  client.assert(response.status === 200, "Response status is not 200");
+  client.assert(response.contentType.mimeType === "application/json", "Expected 'application/json' but received '" + response.contentType.mimeType + "'");
+  client.global.set("userToken", response.body.token);
+});
+%}
+
+### Получение токена под админом
+
+PUT http://localhost:9999/users
+Content-Type: application/x-www-form-urlencoded
+
+login=admin&password=secret
+
+> {%
+client.test("Request executed successfully", function() {
+  client.assert(response.status === 200, "Response status is not 200");
+  client.assert(response.contentType.mimeType === "application/json", "Expected 'application/json' but received '" + response.contentType.mimeType + "'");
+  client.global.set("adminToken", response.body.token);
+});
+%}
+
+### Создаем платежку
+
+POST http://localhost:9999/user/payments
+Authorization: {{userToken}}
+Content-Type: application/x-www-form-urlencoded
+
+amount=10000
+
+> {%
+client.test("Request executed successfully", function() {
+  client.assert(response.status === 201, "Response status is not 201");
+});
+%}
+
+### Только пользователи системы могут создать платежку
+
+POST http://localhost:9999/user/payments
+Content-Type: application/x-www-form-urlencoded
+
+amount=10000
+
+> {%
+client.test("Request executed successfully", function() {
+  client.assert(response.status === 401, "Response status is not 401");
+});
+%}
+
+### Список платежек пользователя
+
+GET http://localhost:9999/user/payments
+Authorization: {{userToken}}
+Content-Type: application/x-www-form-urlencoded
+
+> {%
+client.test("Request executed successfully", function() {
+  client.assert(response.status === 200, "Response status is not 200");
+  client.assert(Array.isArray(response.body), "Response body is not array");
+});
+%}
+
+### Список всех платежек
+
+GET http://localhost:9999/admin/payments
+Authorization: {{adminToken}}
+Content-Type: application/x-www-form-urlencoded
+
+> {%
+client.test("Request executed successfully", function() {
+  client.assert(response.status === 200, "Response status is not 200");
+  client.assert(Array.isArray(response.body), "Response body is not array");
+});
+%}
